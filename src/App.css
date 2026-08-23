@@ -13,8 +13,10 @@ body { margin: 0; }
 .reader-layout { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .navigation-card { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow: auto; }
 .entry-menu { margin: 16px -12px 0; border-inline-end: 0 !important; }
+.entry-trigger-legend { margin-top: 12px; font-size: 12px; }
+.entry-trigger-hint { display: inline-flex; }
 .entry-menu .ant-menu-title-content { min-width: 0; overflow: hidden; }
-.entry-menu .ant-menu-title-content > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px; }
+.entry-menu .ant-menu-title-content > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 8px; }
 .entry-menu .ant-menu-title-content > div > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .entry-menu .ant-typography { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .compatibility-alert { margin-top: 16px; }

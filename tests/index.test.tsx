@@ -1,6 +1,7 @@
 import { expect, test } from '@rstest/core';
 import { parseLorebook } from '../src/features/import/adapters';
 import { parsePngCharacterCard } from '../src/features/import/adapters/png-character-card';
+import { getLorebookEntrySortMode, sortLorebookEntries } from '../src/domain/lorebook';
 
 function pngWithTextMetadata(keyword: string, text: string): ArrayBuffer {
   const encoder = new TextEncoder();
@@ -31,6 +32,29 @@ test('accepts an array-shaped entries collection and makes absent content readab
   const book = parseLorebook(JSON.stringify({ entries: [{ key: 'tavern' }] }));
   expect(book.entries[0]).toMatchObject({ id: '0', keys: ['tavern'], content: '' });
   expect(book.warnings[0]).toContain('没有 content');
+});
+
+test('uses the complete custom display index sequence before insertion priority', () => {
+  const book = parseLorebook(JSON.stringify({ entries: {
+    '2': { uid: 2, key: ['first'], order: 100, extensions: { display_index: 0 } },
+    '7': { uid: 7, key: ['second'], constant: true, order: 50, extensions: { display_index: 1 } },
+    '10': { uid: 10, key: ['third'], order: 250, extensions: { display_index: 2 } },
+  } }));
+
+  expect(getLorebookEntrySortMode(book.entries)).toBe('custom');
+  expect(sortLorebookEntries(book.entries).map((entry) => entry.id)).toEqual(['2', '7', '10']);
+});
+
+test('falls back to SillyTavern insertion priority when custom order is incomplete', () => {
+  const book = parseLorebook(JSON.stringify({ entries: {
+    '2': { uid: 2, key: ['low'], order: 100, extensions: { display_index: 0 } },
+    '7': { uid: 7, key: ['constant'], constant: true, order: 50 },
+    '10': { uid: 10, key: ['high'], order: 250 },
+    '12': { uid: 12, key: ['disabled'], disable: true, order: 999 },
+  } }));
+
+  expect(getLorebookEntrySortMode(book.entries)).toBe('insertion');
+  expect(sortLorebookEntries(book.entries).map((entry) => entry.id)).toEqual(['7', '10', '2', '12']);
 });
 
 test('recognizes a character card embedded character_book', () => {

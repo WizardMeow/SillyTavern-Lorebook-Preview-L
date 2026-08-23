@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { lorebookEntrySchema, lorebookSchema, type Lorebook } from '../../../domain/lorebook';
-import { entriesCollectionSchema, entryPairs, jsonRecordSchema, numberAt, positionAt, strings, stringListSchema } from './shared';
+import { displayIndexAt, entriesCollectionSchema, entryPairs, jsonRecordSchema, numberAt, positionAt, strings, stringListSchema } from './shared';
 
 export const worldInfoDocumentSchema = z.object({
   name: z.string().optional(),
@@ -33,6 +33,7 @@ function normalizeEntry(raw: WorldInfoEntry, fallbackId: string, warnings: strin
     disabled: raw.disable === true,
     constant: raw.constant === true,
     position: positionAt(raw),
+    displayIndex: displayIndexAt(raw),
     order: numberAt(raw, 'order'),
     depth: numberAt(raw, 'depth'),
     raw,

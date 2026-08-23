@@ -17,11 +17,11 @@ import {
   Menu,
   Segmented,
   Space,
-  Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { useAtom } from 'jotai';
-import { contentRenderModeSchema, matchesEntry, type ContentRenderMode, type Lorebook } from './domain/lorebook';
+import { contentRenderModeSchema, matchesEntry, sortLorebookEntries, type ContentRenderMode, type Lorebook } from './domain/lorebook';
 import { importLorebook, isHttpUrl, looksLikeHttpUrl } from './features/import/importer';
 import { contentRenderModeAtom, lorebookAtom, searchQueryAtom, selectedEntryIdAtom } from './state/lorebook';
 import './App.css';
@@ -38,6 +38,16 @@ function positionLabel(position: string | number | undefined): string | number |
 
 function entryTitle(entry: Lorebook['entries'][number]) {
   return entry.comment || entry.keys[0] || `条目 ${entry.id}`;
+}
+
+function EntryTriggerHint({ constant, showText = false }: { constant: boolean; showText?: boolean }) {
+  const isConstant = constant;
+  const title = isConstant
+    ? '蓝灯：常驻条目，不需要关键词，会在每次生成时尝试注入。'
+    : '黄灯：条件条目，匹配主关键词（及可选次关键词）后才会尝试注入。';
+  return <Tooltip title={title}>
+    <span className="entry-trigger-hint"><Badge status={isConstant ? 'processing' : 'warning'} text={showText ? (isConstant ? '蓝灯 · 常驻注入' : '黄灯 · 条件注入') : undefined} /></span>
+  </Tooltip>;
 }
 
 function ContentRenderer({ content, mode }: { content: string; mode: ContentRenderMode }) {
@@ -62,7 +72,7 @@ function EntryDetail({ entry, renderMode }: { entry: Lorebook['entries'][number]
         </div>
         <Space wrap>
           {entry.disabled && <Badge status="default" text="已禁用" />}
-          {entry.constant && <Tag color="gold">常驻</Tag>}
+          <EntryTriggerHint constant={entry.constant} showText />
         </Space>
       </Flex>
       <div>
@@ -138,7 +148,7 @@ const App = () => {
     void importLorebook({ kind: 'text', value: importUrlParameter }).then(accept).catch(report);
   }, []);
 
-  const entries = book?.entries.filter((entry) => matchesEntry(entry, query)) ?? [];
+  const entries = book ? sortLorebookEntries(book.entries).filter((entry) => matchesEntry(entry, query)) : [];
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? entries[0];
 
   return <ConfigProvider theme={{ token: { colorPrimary: '#8b5c31', borderRadius: 10, colorBgLayout: '#f5f2ed', fontFamily: "Inter, 'Noto Sans SC', system-ui, sans-serif" } }}>
@@ -177,6 +187,10 @@ const App = () => {
           <Card className="navigation-card" title={<span>条目导航 <Typography.Text type="secondary">{entries.length} / {book.entries.length}</Typography.Text></span>}>
             <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} title={book.source}>{book.kind === 'world-info' ? '独立世界书' : '角色卡内嵌世界书'} · {book.name}</Typography.Paragraph>
             <Input.Search value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选关键词、备注或正文" allowClear />
+            <Space className="entry-trigger-legend" wrap size="small">
+              <EntryTriggerHint constant showText />
+              <EntryTriggerHint constant={false} showText />
+            </Space>
             <Menu
               className="entry-menu"
               mode="inline"
@@ -184,7 +198,7 @@ const App = () => {
               onClick={({ key }) => setSelectedEntryId(key)}
               items={entries.map((entry) => ({
                 key: entry.id,
-                label: <div><span>{entryTitle(entry)}</span><Typography.Text type="secondary">#{entry.id}{entry.disabled ? ' · 已禁用' : ''}</Typography.Text></div>,
+                label: <div><span>{entryTitle(entry)}</span><EntryTriggerHint constant={entry.constant} /><Typography.Text type="secondary">#{entry.id}{entry.disabled ? ' · 已禁用' : ''}</Typography.Text></div>,
               }))}
             />
             {book.warnings.length > 0 && <Alert className="compatibility-alert" type="warning" showIcon message={`${book.warnings.length} 条兼容性提示`} description={<ul>{book.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>} />}

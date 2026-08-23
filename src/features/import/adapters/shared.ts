@@ -23,6 +23,15 @@ export function positionAt(record: z.infer<typeof jsonRecordSchema>): number | s
   return typeof extensionPosition === 'number' || typeof extensionPosition === 'string' ? extensionPosition : undefined;
 }
 
+/** SillyTavern persists its draggable editor order in extensions.display_index. */
+export function displayIndexAt(record: z.infer<typeof jsonRecordSchema>): number | undefined {
+  const directValue = numberAt(record, 'displayIndex');
+  if (directValue !== undefined) return directValue;
+
+  const extensions = jsonRecordSchema.safeParse(record.extensions);
+  return extensions.success ? numberAt(extensions.data, 'display_index') : undefined;
+}
+
 export function entryPairs(collection: z.infer<typeof entriesCollectionSchema>): Array<[string, unknown]> {
   return Array.isArray(collection)
     ? collection.map((entry, index) => [String(index), entry])
