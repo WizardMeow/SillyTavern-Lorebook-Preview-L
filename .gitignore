@@ -3,6 +3,16 @@
 *.local
 *.log*
 
+# Secrets and personal credentials (keep an .env.example if documentation is needed)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+
 # Dist
 node_modules
 dist/

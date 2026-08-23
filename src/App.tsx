@@ -19,6 +19,7 @@ import {
   Space,
   Tooltip,
   Typography,
+  Tag
 } from 'antd';
 import { useAtom } from 'jotai';
 import { contentRenderModeSchema, matchesEntry, sortLorebookEntries, type ContentRenderMode, type Lorebook } from './domain/lorebook';
