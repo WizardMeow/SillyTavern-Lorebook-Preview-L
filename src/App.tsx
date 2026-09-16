@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -14,7 +14,6 @@ import {
   Flex,
   Input,
   Layout,
-  Menu,
   Segmented,
   Space,
   Tooltip,
@@ -22,8 +21,9 @@ import {
   Tag
 } from 'antd';
 import { useAtom } from 'jotai';
-import { contentRenderModeSchema, matchesEntry, sortLorebookEntries, type ContentRenderMode, type Lorebook } from './domain/lorebook';
+import { contentRenderModeSchema, type ContentRenderMode, type Lorebook } from './domain/lorebook';
 import { importLorebook, isHttpUrl, looksLikeHttpUrl } from './features/import/importer';
+import { createLorebookIndex } from './features/reader/lorebook-index';
 import { contentRenderModeAtom, lorebookAtom, searchQueryAtom, selectedEntryIdAtom } from './state/lorebook';
 import './App.css';
 
@@ -39,6 +39,11 @@ function positionLabel(position: string | number | undefined): string | number |
 
 function entryTitle(entry: Lorebook['entries'][number]) {
   return entry.comment || entry.keys[0] || `条目 ${entry.id}`;
+}
+
+function isEditableOrInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest('input, textarea, select, button, a, [contenteditable="true"], [role="button"], [role="tab"], [role="radio"], [role="textbox"]'));
 }
 
 function EntryTriggerHint({ constant, showText = false }: { constant: boolean; showText?: boolean }) {
@@ -90,6 +95,99 @@ function EntryDetail({ entry, renderMode }: { entry: Lorebook['entries'][number]
   );
 }
 
+const navigationRowHeight = 48;
+const navigationOverscan = 6;
+
+function VirtualEntryList({ entries, selectedEntryId, onSelect }: {
+  entries: Lorebook['entries'];
+  selectedEntryId: string | undefined;
+  onSelect: (id: string) => void;
+}) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const start = Math.max(0, Math.floor(scrollTop / navigationRowHeight) - navigationOverscan);
+  const visibleCount = Math.ceil(360 / navigationRowHeight) + navigationOverscan * 2;
+  const visibleEntries = entries.slice(start, start + visibleCount);
+
+  useEffect(() => {
+    viewport.current?.scrollTo({ top: 0 });
+    setScrollTop(0);
+  }, [entries]);
+
+  useEffect(() => {
+    const selectedIndex = entries.findIndex((entry) => entry.id === selectedEntryId);
+    const element = viewport.current;
+    if (selectedIndex < 0 || !element) return;
+
+    const top = selectedIndex * navigationRowHeight;
+    const bottom = top + navigationRowHeight;
+    if (top < element.scrollTop) element.scrollTop = top;
+    else if (bottom > element.scrollTop + element.clientHeight) element.scrollTop = bottom - element.clientHeight;
+  }, [entries, selectedEntryId]);
+
+  const selectAt = (index: number) => {
+    const entry = entries[index];
+    if (!entry) return;
+    onSelect(entry.id);
+
+    const element = viewport.current;
+    if (!element) return;
+    const top = index * navigationRowHeight;
+    const bottom = top + navigationRowHeight;
+    if (top < element.scrollTop) element.scrollTop = top;
+    else if (bottom > element.scrollTop + element.clientHeight) element.scrollTop = bottom - element.clientHeight;
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const selectedIndex = Math.max(0, entries.findIndex((entry) => entry.id === selectedEntryId));
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      selectAt(Math.min(entries.length - 1, selectedIndex + 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      selectAt(Math.max(0, selectedIndex - 1));
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      selectAt(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      selectAt(entries.length - 1);
+    }
+  };
+
+  return <div
+    ref={viewport}
+    className="entry-list-viewport"
+    role="listbox"
+    tabIndex={0}
+    aria-label="世界书条目导航"
+    aria-activedescendant={selectedEntryId ? `entry-${selectedEntryId}` : undefined}
+    onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+    onKeyDown={onKeyDown}
+  >
+    <div className="entry-list-spacer" style={{ height: entries.length * navigationRowHeight }}>
+      {visibleEntries.map((entry, visibleIndex) => {
+        const index = start + visibleIndex;
+        const selected = entry.id === selectedEntryId;
+        return <button
+          id={`entry-${entry.id}`}
+          key={entry.id}
+          className={`entry-list-item${selected ? ' is-selected' : ''}`}
+          type="button"
+          role="option"
+          aria-selected={selected}
+          style={{ transform: `translateY(${index * navigationRowHeight}px)` }}
+          onClick={() => selectAt(index)}
+        >
+          <span title={entryTitle(entry)}>{entryTitle(entry)}</span>
+          <EntryTriggerHint constant={entry.constant} />
+          <Typography.Text type="secondary">#{entry.id}{entry.disabled ? ' · 已禁用' : ''}</Typography.Text>
+        </button>;
+      })}
+    </div>
+  </div>;
+}
+
 const App = () => {
   const [book, setBook] = useAtom(lorebookAtom);
   const [query, setQuery] = useAtom(searchQueryAtom);
@@ -99,11 +197,15 @@ const App = () => {
   const [isImportExpanded, setIsImportExpanded] = useState(true);
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'idle' });
   const fileInput = useRef<HTMLInputElement>(null);
+  const contentArea = useRef<HTMLDivElement>(null);
+  const detailCard = useRef<HTMLDivElement>(null);
   const autoLoadStarted = useRef(false);
 
-  const accept = (next: Lorebook) => {
+  const accept = (next: Lorebook, clearPastedText = false) => {
     setBook(next);
+    setQuery('');
     setSelectedEntryId(next.entries[0]?.id ?? null);
+    if (clearPastedText) setPastedText('');
     setIsImportExpanded(false);
     setLoadState({ kind: 'idle' });
   };
@@ -111,14 +213,15 @@ const App = () => {
   const loadFile = async (file: File | undefined) => {
     if (!file) return;
     setLoadState({ kind: 'loading', message: `正在读取 ${file.name}…` });
-    try { accept(await importLorebook({ kind: 'file', file })); } catch (error) { report(error); }
+    try { accept(await importLorebook({ kind: 'file', file }), true); } catch (error) { report(error); }
   };
   const loadInput = async () => {
     const input = pastedText.trim();
     if (!input) return;
-    setLoadState({ kind: 'loading', message: looksLikeHttpUrl(input) ? '正在从 URL 载入…' : '正在解析 JSON…' });
+    const isUrl = looksLikeHttpUrl(input);
+    setLoadState({ kind: 'loading', message: isUrl ? '正在从 URL 载入…' : '正在解析 JSON…' });
     try {
-      accept(await importLorebook({ kind: 'text', value: input }));
+      accept(await importLorebook({ kind: 'text', value: input }), !isUrl);
     } catch (error) { report(error); }
   };
   const loadDroppedFile = (event: DragEvent<HTMLTextAreaElement>) => {
@@ -149,16 +252,64 @@ const App = () => {
     void importLorebook({ kind: 'text', value: importUrlParameter }).then(accept).catch(report);
   }, []);
 
-  const entries = book ? sortLorebookEntries(book.entries).filter((entry) => matchesEntry(entry, query)) : [];
-  const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? entries[0];
+  const readerIndex = useMemo(() => book ? createLorebookIndex(book) : null, [book]);
+  const deferredQuery = useDeferredValue(query);
+  const entries = useMemo(() => readerIndex?.search(deferredQuery) ?? [], [readerIndex, deferredQuery]);
+  const selectedCandidate = readerIndex?.get(selectedEntryId);
+  const selectedEntry = selectedCandidate && entries.includes(selectedCandidate) ? selectedCandidate : entries[0];
+
+  useEffect(() => {
+    if (!selectedEntryId) return;
+    detailCard.current?.scrollIntoView({ block: 'start' });
+  }, [selectedEntryId]);
+
+  const changeSelectedEntry = (direction: -1 | 1) => {
+    if (entries.length === 0) return;
+    const selectedIndex = Math.max(0, entries.findIndex((entry) => entry.id === selectedEntry?.id));
+    const nextEntry = entries[selectedIndex + direction];
+    if (nextEntry) setSelectedEntryId(nextEntry.id);
+  };
+
+  const onBackgroundClick = (event: MouseEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || entries.length === 0) return;
+    const contentBounds = contentArea.current?.getBoundingClientRect();
+    if (!contentBounds) return;
+
+    if (event.clientX < contentBounds.left) changeSelectedEntry(-1);
+    else if (event.clientX > contentBounds.right) changeSelectedEntry(1);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.defaultPrevented
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || isEditableOrInteractiveTarget(event.target)
+        || entries.length === 0
+      ) return;
+
+      if (event.key === 'ArrowDown' || event.key.toLowerCase() === 'j') changeSelectedEntry(1);
+      else if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'k') changeSelectedEntry(-1);
+      else if (event.key === 'Home') setSelectedEntryId(entries[0].id);
+      else if (event.key === 'End') setSelectedEntryId(entries[entries.length - 1].id);
+      else return;
+
+      event.preventDefault();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [entries, selectedEntry?.id, setSelectedEntryId]);
 
   return <ConfigProvider theme={{ token: { colorPrimary: '#8b5c31', borderRadius: 10, colorBgLayout: '#f5f2ed', fontFamily: "Inter, 'Noto Sans SC', system-ui, sans-serif" } }}>
-    <Layout className="app-layout">
+    <Layout className="app-layout" onClick={onBackgroundClick}>
       <Layout.Header className="app-header">
         <Typography.Title level={1}>Lorebook Reader</Typography.Title>
         <Typography.Text type="secondary">本地解析 · 无后端 · SillyTavern 世界书预览</Typography.Text>
       </Layout.Header>
-      <Layout.Content className="app-content">
+      <Layout.Content ref={contentArea} className="app-content">
         <Collapse
           className="import-card"
           activeKey={isImportExpanded ? ['import'] : []}
@@ -188,23 +339,17 @@ const App = () => {
           <Card className="navigation-card" title={<span>条目导航 <Typography.Text type="secondary">{entries.length} / {book.entries.length}</Typography.Text></span>}>
             <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} title={book.source}>{book.kind === 'world-info' ? '独立世界书' : '角色卡内嵌世界书'} · {book.name}</Typography.Paragraph>
             <Input.Search value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选关键词、备注或正文" allowClear />
+            <Typography.Text type="secondary" className="keyboard-shortcuts">快捷键：↑/↓ 或 J/K 切换条目，Home/End 跳至首尾；点击页面两侧空白处翻页</Typography.Text>
             <Space className="entry-trigger-legend" wrap size="small">
               <EntryTriggerHint constant showText />
               <EntryTriggerHint constant={false} showText />
             </Space>
-            <Menu
-              className="entry-menu"
-              mode="inline"
-              selectedKeys={selectedEntry ? [selectedEntry.id] : []}
-              onClick={({ key }) => setSelectedEntryId(key)}
-              items={entries.map((entry) => ({
-                key: entry.id,
-                label: <div><span>{entryTitle(entry)}</span><EntryTriggerHint constant={entry.constant} /><Typography.Text type="secondary">#{entry.id}{entry.disabled ? ' · 已禁用' : ''}</Typography.Text></div>,
-              }))}
-            />
+            {entries.length > 0
+              ? <VirtualEntryList entries={entries} selectedEntryId={selectedEntry?.id} onSelect={setSelectedEntryId} />
+              : <Empty className="entry-list-empty" description="没有匹配的条目" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
             {book.warnings.length > 0 && <Alert className="compatibility-alert" type="warning" showIcon message={`${book.warnings.length} 条兼容性提示`} description={<ul>{book.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>} />}
           </Card>
-          <Card className="detail-card" title="条目详情" extra={<Space size="middle"><Segmented
+          <Card ref={detailCard} className="detail-card" title="条目详情" extra={<Space size="middle"><Segmented
             size="small"
             options={[{ label: '纯文本', value: 'text' }, { label: 'Markdown', value: 'markdown' }]}
             value={contentRenderMode}

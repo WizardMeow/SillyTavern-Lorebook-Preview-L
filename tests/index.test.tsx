@@ -2,6 +2,7 @@ import { expect, test } from '@rstest/core';
 import { parseLorebook } from '../src/features/import/adapters';
 import { parsePngCharacterCard } from '../src/features/import/adapters/png-character-card';
 import { getLorebookEntrySortMode, sortLorebookEntries } from '../src/domain/lorebook';
+import { createLorebookIndex } from '../src/features/reader/lorebook-index';
 
 function pngWithTextMetadata(keyword: string, text: string): ArrayBuffer {
   const encoder = new TextEncoder();
@@ -45,7 +46,7 @@ test('uses the complete custom display index sequence before insertion priority'
   expect(sortLorebookEntries(book.entries).map((entry) => entry.id)).toEqual(['2', '7', '10']);
 });
 
-test('falls back to SillyTavern insertion priority when custom order is incomplete', () => {
+test('preserves source order when custom display indexes are incomplete', () => {
   const book = parseLorebook(JSON.stringify({ entries: {
     '2': { uid: 2, key: ['low'], order: 100, extensions: { display_index: 0 } },
     '7': { uid: 7, key: ['constant'], constant: true, order: 50 },
@@ -53,8 +54,19 @@ test('falls back to SillyTavern insertion priority when custom order is incomple
     '12': { uid: 12, key: ['disabled'], disable: true, order: 999 },
   } }));
 
-  expect(getLorebookEntrySortMode(book.entries)).toBe('insertion');
-  expect(sortLorebookEntries(book.entries).map((entry) => entry.id)).toEqual(['7', '10', '2', '12']);
+  expect(getLorebookEntrySortMode(book.entries)).toBe('source');
+  expect(sortLorebookEntries(book.entries).map((entry) => entry.id)).toEqual(['2', '7', '10', '12']);
+});
+
+test('indexes normalized search text and entry ids once per loaded book', () => {
+  const book = parseLorebook(JSON.stringify({ entries: {
+    '0': { uid: 20, key: ['Alpha'], content: 'First entry' },
+    '1': { uid: 10, key: ['Beta'], content: 'Second entry' },
+  } }));
+  const index = createLorebookIndex(book);
+
+  expect(index.get('10')?.content).toBe('Second entry');
+  expect(index.search('ALPHA').map((entry) => entry.id)).toEqual(['20']);
 });
 
 test('recognizes a character card embedded character_book', () => {

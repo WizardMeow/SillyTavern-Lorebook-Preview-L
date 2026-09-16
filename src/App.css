@@ -6,22 +6,26 @@ body { margin: 0; }
 .app-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: auto; padding: 28px clamp(20px, 5vw, 72px); line-height: normal; background: #fff; border-bottom: 1px solid #f0f0f0; }
 .app-header .ant-typography { margin: 0; }
 .app-content { max-width: 1440px; width: 100%; margin: 0 auto; padding: 32px clamp(20px, 5vw, 72px) 72px; }
-.import-card { margin-bottom: 18px; background: #fff; }
+.import-card { position: sticky; top: 16px; z-index: 10; margin-bottom: 18px; background: #fff; }
 .import-stack { width: 100%; max-width: 880px; }
 .source-input textarea { font-size: 16px; line-height: 1.7; }
 .load-alert { margin: 0 0 18px; }
 .reader-layout { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .navigation-card { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow: auto; }
-.entry-menu { margin: 16px -12px 0; border-inline-end: 0 !important; }
 .entry-trigger-legend { margin-top: 12px; font-size: 12px; }
+.keyboard-shortcuts { display: block; margin-top: 8px; font-size: 12px; }
 .entry-trigger-hint { display: inline-flex; }
-.entry-menu .ant-menu-title-content { min-width: 0; overflow: hidden; }
-.entry-menu .ant-menu-title-content > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 8px; }
-.entry-menu .ant-menu-title-content > div > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.entry-menu .ant-typography { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.entry-list-viewport { height: min(520px, calc(100vh - 270px)); min-height: 240px; margin: 16px -12px 0; overflow: auto; outline-offset: -2px; }
+.entry-list-spacer { position: relative; }
+.entry-list-item { position: absolute; inset: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; height: 48px; padding: 0 12px; color: inherit; font: inherit; text-align: left; background: transparent; border: 0; cursor: pointer; }
+.entry-list-item:hover, .entry-list-item:focus-visible { background: #f7f2ec; outline: none; }
+.entry-list-item.is-selected { color: #6f431f; background: #f5e9dc; }
+.entry-list-item > span:first-child, .entry-list-item .ant-typography { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-list-item .ant-typography { font-size: 14px; }
+.entry-list-empty { margin: 28px 0 12px; }
 .compatibility-alert { margin-top: 16px; }
 .compatibility-alert ul { margin: 8px 0 0; padding-left: 18px; }
-.detail-card { min-height: 490px; }
+.detail-card { min-height: 490px; scroll-margin-top: 90px; }
 .detail-stack { width: 100%; }
 .detail-stack .ant-typography h2 { margin: 4px 0 0; }
 .tag-group { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 16px; }
@@ -42,5 +46,5 @@ body { margin: 0; }
   .app-content { padding: 20px 16px 44px; }
   .reader-layout { grid-template-columns: 1fr; }
   .navigation-card { position: static; max-height: none; }
-  .entry-menu { max-height: 320px; overflow: auto; }
+  .entry-list-viewport { height: 320px; min-height: 0; }
 }

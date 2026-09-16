@@ -139,6 +139,43 @@
 * 因此预览器的 `png-character-card` 适配器只处理这层 PNG 载体，随后把解出的 JSON 交给 `character-card` 适配器；不把 PNG 当作世界书格式，也不执行角色卡内的任何内容。
 * 官方 FAQ 提醒，重保存图片可能会移除内嵌定义，且扩展名为 `.png` 的文件有可能实际是 WebP。对此应给出可读导入错误，而非显示为空书。[官方 FAQ](https://docs.sillytavern.app/usage/faq/#i-tried-to-import-a-png-character-card-but-got-an-error-that-its-invalid-why)
 
+## 七、Inclusion Group 与递归（2026-08-23 增补）
+
+> 结论：SillyTavern 支持**扁平的 Inclusion Group（包含组）**和**运行时递归扫描**；两者都不是 entry 的父子/目录嵌套 JSON。预览器不应把它们显示为可折叠的世界书树。
+
+### Inclusion Group 是标签式的互斥选择
+
+原生 entry 的相关字段为 `group: string`、`groupOverride: boolean`、`groupWeight: number` 和 `useGroupScoring: boolean | null`，默认分别为 `""`、`false`、`100`、`null`。[当前 entry schema](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L4002-L4035)
+
+* `group` 是逗号分隔的字符串标签；一条 entry 可以写入多个标签。实现会以 `group.split(/,\s*/)` 建立临时的平面 map，而非读取子条目或路径。[源码：分组构建](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L5269-L5280)；官方文档也说明多组以逗号分隔。[官方文档：Inclusion Group](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#inclusion-group)
+* 同一标签下有多条 entry 同时激活时只保留一条：有 `groupOverride: true` 的候选时选其 `order` 最大者；否则按 `groupWeight` 加权随机。`useGroupScoring` 可先按关键词命中数量缩小候选集。[源码：优先/权重选择](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L5319-L5346) / [官方文档：Prioritize Inclusion 与 Group Scoring](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#prioritize-inclusion)
+* 当前标准 entry schema 和分组处理都没有 `parent`、`children`、`folder` 或 `subentries` 语义。因此只能将组展示为平面标签；最多按逗号拆分、去掉空标签，不可凭此构造层级。
+* Character Card 的内嵌世界书把等价值放在每条 `extensions.group`、`extensions.group_override`、`extensions.group_weight`、`extensions.use_group_scoring` 中，ST 转换后才成为原生 entry 的 camelCase 字段。[`convertCharacterBook` 映射](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L5498-L5535)
+
+### 递归是内容触发的激活链
+
+打开全局 **Recursive Scan** 后，成功激活且未设 `preventRecursion` 的 entry，其 `content` 会写入下一轮扫描缓冲；内容中命中另一条 entry 的 key 就可继续激活。所有 entry 仍留在同一个顶层 `entries` record 中，并不会生成或读取嵌套数据。[官方文档：Recursive scanning](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#recursive-scanning) / [源码：递归缓冲与下一轮](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L4960-L5025)
+
+| 字段 | 含义 |
+| --- | --- |
+| `excludeRecursion` | 不能由递归阶段激活。 |
+| `preventRecursion` | 条目仍可激活，但其内容不触发下一轮。 |
+| `delayUntilRecursion` | 初始扫描跳过，仅在递归阶段匹配；数值可延后到相应递归层级。 |
+
+三个字段的默认值与实际递归阶段过滤见当前源码。[字段默认值](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L4016-L4024) / [阶段过滤](https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js#L4747-L4760)。全局 Max Recursion Steps 为非零时限制扫描轮数；设为 0 时仍受 token budget 限制。[官方文档：Max Recursion Steps](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#max-recursion-steps)
+
+这类预览器应显示分组与递归配置，但不应预测最终激活结果：聊天文本、全局开关、概率、预算、组选择和最大轮数都会影响结果。另需区分 Outlet：官方明确禁止 outlet macro 嵌套以避免无限循环，这与世界书递归扫描是不同机制。[Outlet 限制](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#limitations-and-caveats)
+
+## 八、`content` 中的序列化 Character Book 不会被原生展开（2026-08-23 增补）
+
+> 结论：**不支持。**SillyTavern 只会把角色卡对象路径 `data.character_book` 识别为内嵌世界书；若独立世界书某一 entry 的 `content` 恰好是序列化后的 `[{ keys, secondary_keys, content, … }]`，它仍只是该 entry 的字符串正文，不会变成子条目、也不会在编辑器中展开。
+
+* 原生的 Character Book 导入路径先检查 `characters[chid].data.character_book`，随后将该对象传给 `convertCharacterBook`；转换器遍历的是 `characterBook.entries`，并把每项的 `entry.content` 直接赋给生成条目的 `content`。它没有读取或解析已有 world-info entry 的 `content`。[嵌入书识别与导入](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js#L5167-L5227) / [`convertCharacterBook`](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js#L5096-L5150)
+* 生成 prompt 时，当前实现把已激活 entry 的 `content` 当作文本做宏替换、正则处理与插入；没有将其再次作 JSON 解析或转成 entry 集合。[内容进入 prompt 的处理](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js#L4581-L4585) / [prompt 插入](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js#L4711-L4719)
+* 即使启用 Recursive Scan，递归也只是将成功激活条目的 `content` 拼接到下一轮的**关键词匹配文本缓冲**；官方文档所说的是 entry 之间相互激活，而不是解析正文中的 JSON 结构。[递归缓冲源码](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js#L4649-L4658) / [官方 Recursive Scanning 文档](https://docs.sillytavern.app/usage/core-concepts/worldinfo/#recursive-scanning)
+
+因此，预览器若为了可读性把这类字符串提供为“可展开的候选子书”，应明确标成**预览器的兼容展示**，不能称为 SillyTavern 原生行为；更不应在无用户操作的情况下把它当作可执行/会被 ST 自动导入的世界书。
+
 ## 来源（第一方）
 
 * [SillyTavern 官方文档：World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)

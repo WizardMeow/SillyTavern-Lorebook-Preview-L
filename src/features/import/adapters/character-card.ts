@@ -26,7 +26,7 @@ export function isCharacterCard(document: z.infer<typeof jsonRecordSchema>): boo
   return characterCardSchema.safeParse(document).success;
 }
 
-function normalizeEntry(raw: CharacterBookEntry, fallbackId: string, warnings: string[]) {
+function normalizeEntry(raw: CharacterBookEntry, fallbackId: string, sourceIndex: number, warnings: string[]) {
   const id = String(raw.id ?? fallbackId);
   if (raw.content === undefined) warnings.push(`角色卡世界书条目 ${id} 没有 content，仍会以空内容显示。`);
   return lorebookEntrySchema.parse({
@@ -39,6 +39,7 @@ function normalizeEntry(raw: CharacterBookEntry, fallbackId: string, warnings: s
     constant: raw.constant === true,
     position: positionAt(raw),
     displayIndex: displayIndexAt(raw),
+    sourceIndex,
     order: raw.insertion_order ?? numberAt(raw, 'order'),
     depth: numberAt(raw, 'depth'),
     raw,
@@ -49,13 +50,13 @@ function normalizeEntry(raw: CharacterBookEntry, fallbackId: string, warnings: s
 export function adaptCharacterCard(document: z.infer<typeof jsonRecordSchema>, source: string): Lorebook {
   const card = characterCardSchema.parse(document);
   const warnings: string[] = [];
-  const entries = entryPairs(card.data.character_book.entries).flatMap(([fallbackId, unknownEntry]) => {
+  const entries = entryPairs(card.data.character_book.entries).flatMap(([fallbackId, unknownEntry], sourceIndex) => {
     const entry = characterBookEntrySchema.safeParse(unknownEntry);
     if (!entry.success) {
       warnings.push(`已跳过角色卡世界书条目 ${fallbackId}：它不是 JSON 对象。`);
       return [];
     }
-    return [normalizeEntry(entry.data, fallbackId, warnings)];
+    return [normalizeEntry(entry.data, fallbackId, sourceIndex, warnings)];
   });
   return lorebookSchema.parse({
     kind: 'character-card',

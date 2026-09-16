@@ -16,6 +16,7 @@ export const lorebookEntrySchema = z.object({
   constant: z.boolean(),
   position: z.union([z.number(), z.string()]).optional(),
   displayIndex: z.number().optional(),
+  sourceIndex: z.number().optional(),
   order: z.number().optional(),
   depth: z.number().optional(),
   raw: z.record(z.string(), z.unknown()),
@@ -32,12 +33,12 @@ export const lorebookSchema = z.object({
 });
 export type Lorebook = z.infer<typeof lorebookSchema>;
 
-export type LorebookEntrySortMode = 'custom' | 'insertion';
+export type LorebookEntrySortMode = 'custom' | 'source';
 
 export function getLorebookEntrySortMode(entries: LorebookEntry[]): LorebookEntrySortMode {
   return entries.length > 0 && entries.every((entry) => entry.displayIndex !== undefined)
     ? 'custom'
-    : 'insertion';
+    : 'source';
 }
 
 function compareEntryIds(left: LorebookEntry, right: LorebookEntry): number {
@@ -47,19 +48,15 @@ function compareEntryIds(left: LorebookEntry, right: LorebookEntry): number {
   return left.id.localeCompare(right.id, undefined, { numeric: true });
 }
 
-function priorityRank(entry: LorebookEntry): number {
-  return entry.disabled ? 2 : entry.constant ? 0 : 1;
-}
-
-function compareInsertionPriority(left: LorebookEntry, right: LorebookEntry): number {
-  return priorityRank(left) - priorityRank(right)
-    || (right.order ?? 100) - (left.order ?? 100)
+function compareSourceOrder(left: LorebookEntry, right: LorebookEntry): number {
+  return (left.sourceIndex ?? Number.POSITIVE_INFINITY) - (right.sourceIndex ?? Number.POSITIVE_INFINITY)
     || compareEntryIds(left, right);
 }
 
 /**
- * Mirrors the two useful SillyTavern list views without exposing a sort control:
- * complete draggable metadata uses the custom sequence, otherwise prompt priority.
+ * The reader honors SillyTavern's draggable sequence when it is complete. Partial
+ * draggable metadata cannot describe a reliable sequence, so preserve the source
+ * document order rather than changing the reading order to prompt priority.
  */
 export function sortLorebookEntries(entries: LorebookEntry[]): LorebookEntry[] {
   const mode = getLorebookEntrySortMode(entries);
@@ -69,7 +66,7 @@ export function sortLorebookEntries(entries: LorebookEntry[]): LorebookEntry[] {
         || (right.order ?? 100) - (left.order ?? 100)
         || compareEntryIds(left, right);
     }
-    return compareInsertionPriority(left, right);
+    return compareSourceOrder(left, right);
   });
 }
 

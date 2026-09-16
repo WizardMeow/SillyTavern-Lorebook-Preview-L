@@ -21,7 +21,7 @@ export function isWorldInfo(document: z.infer<typeof jsonRecordSchema>): boolean
   return Object.hasOwn(document, 'entries');
 }
 
-function normalizeEntry(raw: WorldInfoEntry, fallbackId: string, warnings: string[]) {
+function normalizeEntry(raw: WorldInfoEntry, fallbackId: string, sourceIndex: number, warnings: string[]) {
   const id = String(raw.uid ?? fallbackId);
   if (raw.content === undefined) warnings.push(`原生条目 ${id} 没有 content，仍会以空内容显示。`);
   return lorebookEntrySchema.parse({
@@ -34,6 +34,7 @@ function normalizeEntry(raw: WorldInfoEntry, fallbackId: string, warnings: strin
     constant: raw.constant === true,
     position: positionAt(raw),
     displayIndex: displayIndexAt(raw),
+    sourceIndex,
     order: numberAt(raw, 'order'),
     depth: numberAt(raw, 'depth'),
     raw,
@@ -45,13 +46,13 @@ export function adaptWorldInfo(document: z.infer<typeof jsonRecordSchema>, sourc
   const parsed = worldInfoDocumentSchema.safeParse(document);
   if (!parsed.success) throw new Error('这是顶层含 `entries` 的文档，但 `entries` 必须是对象或数组。');
   const warnings: string[] = [];
-  const entries = entryPairs(parsed.data.entries).flatMap(([fallbackId, unknownEntry]) => {
+  const entries = entryPairs(parsed.data.entries).flatMap(([fallbackId, unknownEntry], sourceIndex) => {
     const entry = worldInfoEntrySchema.safeParse(unknownEntry);
     if (!entry.success) {
       warnings.push(`已跳过原生条目 ${fallbackId}：它不是 JSON 对象。`);
       return [];
     }
-    return [normalizeEntry(entry.data, fallbackId, warnings)];
+    return [normalizeEntry(entry.data, fallbackId, sourceIndex, warnings)];
   });
   return lorebookSchema.parse({
     kind: 'world-info',
