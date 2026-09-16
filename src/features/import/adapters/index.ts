@@ -1,5 +1,6 @@
 import { LorebookParseError, type Lorebook } from '../../../domain/lorebook';
 import { adaptCharacterCard, isCharacterCard } from './character-card';
+import { adaptQuickReplies, isQuickReplies } from './quick-replies';
 import { jsonRecordSchema } from './shared';
 import { adaptWorldInfo, isWorldInfo } from './world-info';
 
@@ -19,5 +20,6 @@ export function parseLorebook(jsonText: string, source = '已粘贴的 JSON'): L
 
   if (isWorldInfo(document.data)) return adaptWorldInfo(document.data, source);
   if (isCharacterCard(document.data)) return adaptCharacterCard(document.data, source);
-  throw new LorebookParseError('未识别为独立 SillyTavern 世界书，也未识别为带 data.character_book 的角色卡。');
+  if (isQuickReplies(document.data)) return adaptQuickReplies(document.data, source);
+  throw new LorebookParseError('未识别为独立 SillyTavern 世界书、快捷回复导出，也未识别为带 data.character_book 的角色卡。');
 }

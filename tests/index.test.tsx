@@ -76,6 +76,17 @@ test('recognizes a character card embedded character_book', () => {
   expect(book.entries[0]).toMatchObject({ id: '3', keys: ['Kael'], disabled: true, order: 42 });
 });
 
+test('recognizes a SillyTavern Quick Replies export', () => {
+  const book = parseLorebook(JSON.stringify({
+    version: 2,
+    name: '露出玩法QR',
+    qrList: [{ id: 2, label: '风险检定系统', title: '', message: '/rand from=1 to=100', isHidden: false }],
+  }), 'quick-replies.json');
+
+  expect(book).toMatchObject({ kind: 'quick-replies', name: '露出玩法QR' });
+  expect(book.entries[0]).toMatchObject({ id: '2', keys: ['风险检定系统'], comment: '风险检定系统', content: '/rand from=1 to=100' });
+});
+
 test('extracts an embedded character-book from a PNG character card', () => {
   const card = { data: { character_book: { name: 'PNG Lore', entries: [{ id: 8, keys: ['harbor'], content: 'The harbor never sleeps.' }] } } };
   const base64 = btoa(new TextEncoder().encode(JSON.stringify(card)).reduce((text, byte) => text + String.fromCharCode(byte), ''));

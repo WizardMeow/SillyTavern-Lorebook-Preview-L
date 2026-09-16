@@ -241,6 +241,11 @@ const App = () => {
     event.target.value = '';
     void loadFile(file);
   };
+  const openFilePicker = () => fileInput.current?.click();
+  const openFilePickerFromContextMenu = (event: MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    openFilePicker();
+  };
 
   useEffect(() => {
     const importUrlParameter = new URLSearchParams(window.location.search).get('url')?.trim();
@@ -314,8 +319,8 @@ const App = () => {
           className="import-card"
           activeKey={isImportExpanded ? ['import'] : []}
           onChange={(keys) => setIsImportExpanded(keys.includes('import'))}
-          items={[{ key: 'import', label: book ? '导入或切换世界书' : '导入世界书', children: <Space orientation="vertical" size="middle" className="import-stack">
-            <Typography.Text type="secondary">粘贴世界书 JSON、输入 URL，或将本地 JSON / PNG 角色卡拖入下方输入框。</Typography.Text>
+          items={[{ key: 'import', label: <span onContextMenu={openFilePickerFromContextMenu}>{book ? '导入或切换世界书' : '导入世界书'}</span>, children: <Space orientation="vertical" size="middle" className="import-stack">
+            <Typography.Text type="secondary">粘贴世界书 JSON、快捷回复导出、输入 URL，或将本地 JSON / PNG 角色卡拖入下方输入框。右键标题可直接选择本地文件。</Typography.Text>
             <Input.TextArea
               className="source-input"
               value={pastedText}
@@ -328,7 +333,7 @@ const App = () => {
             />
             <Space wrap>
               <Button type="primary" loading={loadState.kind === 'loading'} onClick={() => void loadInput()}>载入</Button>
-              <Button onClick={() => fileInput.current?.click()}>导入文件</Button>
+              <Button onClick={openFilePicker}>导入文件</Button>
               <input ref={fileInput} className="sr-only" type="file" accept="application/json,.json,image/png,.png" onChange={selectLocalFile} />
             </Space>
           </Space> }]}
@@ -337,7 +342,7 @@ const App = () => {
 
         {book && <div className="reader-layout">
           <Card className="navigation-card" title={<span>条目导航 <Typography.Text type="secondary">{entries.length} / {book.entries.length}</Typography.Text></span>}>
-            <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} title={book.source}>{book.kind === 'world-info' ? '独立世界书' : '角色卡内嵌世界书'} · {book.name}</Typography.Paragraph>
+            <Typography.Paragraph type="secondary" ellipsis={{ rows: 1 }} title={book.source}>{book.kind === 'world-info' ? '独立世界书' : book.kind === 'character-card' ? '角色卡内嵌世界书' : '快捷回复'} · {book.name}</Typography.Paragraph>
             <Input.Search value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选关键词、备注或正文" allowClear />
             <Typography.Text type="secondary" className="keyboard-shortcuts">快捷键：↑/↓ 或 J/K 切换条目，Home/End 跳至首尾；点击页面两侧空白处翻页</Typography.Text>
             <Space className="entry-trigger-legend" wrap size="small">

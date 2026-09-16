@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const lorebookSourceKindSchema = z.enum(['world-info', 'character-card']);
+export const lorebookSourceKindSchema = z.enum(['world-info', 'character-card', 'quick-replies']);
 export type LorebookSourceKind = z.infer<typeof lorebookSourceKindSchema>;
 
 export const contentRenderModeSchema = z.enum(['text', 'markdown']);
